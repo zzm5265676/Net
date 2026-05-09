@@ -41,6 +41,15 @@ def train(epoch):
     pic_cnt = 0
     loss_last_10 = 0
     pic_last_10 = 0
+    loss_rgb_sum = 0
+    loss_hvi_sum = 0
+    loss_hvi_weighted_sum = 0
+    k_map_mean_sum = 0
+    k_map_std_sum = 0
+    k_map_min_sum = 0
+    k_map_max_sum = 0
+    k_map_low_ratio_sum = 0
+    k_map_high_ratio_sum = 0
     train_len = len(training_data_loader)
     iter = 0
     torch.autograd.set_detect_anomaly(opt.grad_detect)
@@ -82,11 +91,55 @@ def train(epoch):
         
         loss_print = loss_print + loss.item()
         loss_last_10 = loss_last_10 + loss.item()
+        loss_rgb_sum += loss_rgb.item()
+        loss_hvi_sum += loss_hvi.item()
+        loss_hvi_weighted_sum += (opt.HVI_weight * loss_hvi).item()
+
+        with torch.no_grad():
+            k_map = hvi_aux["k_map"]
+            k_map_mean_sum += k_map.mean().item()
+            k_map_std_sum += k_map.std().item()
+            k_map_min_sum += k_map.min().item()
+            k_map_max_sum += k_map.max().item()
+            k_span = max(model.trans.k_max - model.trans.k_min, 1e-8)
+            low_threshold = model.trans.k_min + 0.1 * k_span
+            high_threshold = model.trans.k_max - 0.1 * k_span
+            k_map_low_ratio_sum += (k_map <= low_threshold).float().mean().item()
+            k_map_high_ratio_sum += (k_map >= high_threshold).float().mean().item()
+
         pic_cnt += 1
         pic_last_10 += 1
         if iter == train_len:
-            print("===> Epoch[{}]: Loss: {:.4f} || Learning rate: lr={}.".format(epoch,
-                loss_last_10/pic_last_10, optimizer.param_groups[0]['lr']))
+            avg_total = loss_last_10 / pic_last_10
+            avg_loss_rgb = loss_rgb_sum / pic_cnt
+            avg_loss_hvi = loss_hvi_sum / pic_cnt
+            avg_loss_hvi_weighted = loss_hvi_weighted_sum / pic_cnt
+            avg_k_mean = k_map_mean_sum / pic_cnt
+            avg_k_std = k_map_std_sum / pic_cnt
+            avg_k_min = k_map_min_sum / pic_cnt
+            avg_k_max = k_map_max_sum / pic_cnt
+            avg_k_low_ratio = k_map_low_ratio_sum / pic_cnt
+            avg_k_high_ratio = k_map_high_ratio_sum / pic_cnt
+            print(
+                "===> Epoch[{}]: Loss: {:.4f} || "
+                "RGB: {:.4f} HVI: {:.4f} HVI(w): {:.4f} || "
+                "k(x) mean/std: {:.4f}/{:.4f} min/max: {:.4f}/{:.4f} "
+                "near_min: {:.2%} near_max: {:.2%} || "
+                "Learning rate: lr={}.".format(
+                    epoch,
+                    avg_total,
+                    avg_loss_rgb,
+                    avg_loss_hvi,
+                    avg_loss_hvi_weighted,
+                    avg_k_mean,
+                    avg_k_std,
+                    avg_k_min,
+                    avg_k_max,
+                    avg_k_low_ratio,
+                    avg_k_high_ratio,
+                    optimizer.param_groups[0]['lr']
+                )
+            )
             loss_last_10 = 0
             pic_last_10 = 0
             output_img = transforms.ToPILImage()((output_rgb)[0].squeeze(0))
