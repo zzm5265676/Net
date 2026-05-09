@@ -72,8 +72,8 @@ def train(epoch):
             output_rgb = output_rgb[0]
         
         # gt_hvi不反向传播梯度
-        # with torch.no_grad():
-        gt_hvi = model.HVIT(gt_rgb)
+        with torch.no_grad():
+            gt_hvi = model.HVIT(gt_rgb)
         output_hvi = model.HVIT(output_rgb)
 
 
