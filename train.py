@@ -45,6 +45,15 @@ def train(epoch):
     pic_cnt = 0
     loss_last_10 = 0
     pic_last_10 = 0
+    loss_rgb_sum = 0
+    loss_hvi_sum = 0
+    loss_edge_sum = 0
+    loss_dark_sum = 0
+    loss_color_sum = 0
+    loss_hvi_weighted_sum = 0
+    loss_edge_weighted_sum = 0
+    loss_dark_weighted_sum = 0
+    loss_color_weighted_sum = 0
 
     train_len = len(training_data_loader)
     iter = 0
@@ -111,20 +120,44 @@ def train(epoch):
         
         loss_print = loss_print + loss.item()
         loss_last_10 = loss_last_10 + loss.item()
+        loss_rgb_sum += loss_rgb.item()
+        loss_hvi_sum += loss_hvi.item()
+        loss_edge_sum += loss_edge.item()
+        loss_dark_sum += loss_dark.item()
+        loss_color_sum += loss_color.item()
+        loss_hvi_weighted_sum += (opt.HVI_weight * loss_hvi).item()
+        loss_edge_weighted_sum += (opt.edge_weight * loss_edge).item()
+        loss_dark_weighted_sum += (opt.dark_weight * loss_dark).item()
+        loss_color_weighted_sum += (opt.color_weight * loss_color).item()
         pic_cnt += 1
         pic_last_10 += 1
         if iter == train_len:
+            avg_total = loss_last_10 / pic_last_10
+            avg_rgb = loss_rgb_sum / pic_cnt
+            avg_hvi = loss_hvi_sum / pic_cnt
+            avg_edge = loss_edge_sum / pic_cnt
+            avg_dark = loss_dark_sum / pic_cnt
+            avg_color = loss_color_sum / pic_cnt
+            avg_hvi_w = loss_hvi_weighted_sum / pic_cnt
+            avg_edge_w = loss_edge_weighted_sum / pic_cnt
+            avg_dark_w = loss_dark_weighted_sum / pic_cnt
+            avg_color_w = loss_color_weighted_sum / pic_cnt
             print(
                 "===> Epoch[{}]: Loss: {:.4f} || "
-                "RGB: {:.4f} HVI: {:.4f} Edge: {:.4f} Dark: {:.4f} Color: {:.4f} || "
+                "Raw -> RGB: {:.4f} HVI: {:.4f} Edge: {:.4f} Dark: {:.4f} Color: {:.4f} || "
+                "Weighted -> HVI: {:.4f} Edge: {:.4f} Dark: {:.4f} Color: {:.4f} || "
                 "Learning rate: lr={}.".format(
                     epoch,
-                    loss_last_10 / pic_last_10,
-                    loss_rgb.item(),
-                    loss_hvi.item(),
-                    loss_edge.item(),
-                    loss_dark.item(),
-                    loss_color.item(),
+                    avg_total,
+                    avg_rgb,
+                    avg_hvi,
+                    avg_edge,
+                    avg_dark,
+                    avg_color,
+                    avg_hvi_w,
+                    avg_edge_w,
+                    avg_dark_w,
+                    avg_color_w,
                     optimizer.param_groups[0]['lr']
                 )
             )
