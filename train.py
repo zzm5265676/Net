@@ -51,14 +51,21 @@ def train(epoch):
         
         # use random gamma function (enhancement curve) to improve generalization
         if opt.gamma:
-            gamma = random.randint(opt.start_gamma,opt.end_gamma) / 100.0
-            output_rgb = model(im1 ** gamma)  
+            gamma = random.randint(opt.start_gamma, opt.end_gamma) / 100.0
+            low_rgb = im1 ** gamma
         else:
-            output_rgb = model(im1)  
-            
+            low_rgb = im1
+
         gt_rgb = im2
-        output_hvi = model.HVIT(output_rgb)
-        gt_hvi = model.HVIT(gt_rgb)
+
+        # 关键修改：
+        # forward 内部已经得到 output_hvi 和输入侧 hvi_aux
+        output_rgb, output_hvi, hvi_aux = model(low_rgb, return_hvi=True)
+        # 关键修改：
+        # GT HVI 使用同一个输入侧 k_map，并且不对 GT 分支反传
+        with torch.no_grad():
+            gt_hvi = model.HVIT(gt_rgb, aux=hvi_aux)
+
         loss_hvi = L1_loss(output_hvi, gt_hvi) + D_loss(output_hvi, gt_hvi) + E_loss(output_hvi, gt_hvi) + opt.P_weight * P_loss(output_hvi, gt_hvi)[0]
         loss_rgb = L1_loss(output_rgb, gt_rgb) + D_loss(output_rgb, gt_rgb) + E_loss(output_rgb, gt_rgb) + opt.P_weight * P_loss(output_rgb, gt_rgb)[0]
         loss = loss_rgb + opt.HVI_weight * loss_hvi

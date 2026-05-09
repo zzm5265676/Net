@@ -68,10 +68,19 @@ class CIDNet(nn.Module, PyTorchModelHubMixin):
         
         self.trans = RGB_HVI()
         
-    def forward(self, x):
+    def forward(self, x, return_hvi=False):
         dtypes = x.dtype
-        hvi = self.trans.HVIT(x)
-        i = hvi[:,2,:,:].unsqueeze(1).to(dtypes)
+        # 原始逻辑
+        # hvi = self.trans.HVIT(x)
+        # i = hvi[:,2,:,:].unsqueeze(1).to(dtypes)
+
+        # 改进口K逻辑 当return_aux = True 时候，返回map
+        # 输入低光图像定义当前 batch 的 HVI 坐标系
+        hvi, hvi_aux = self.trans.HVIT(x, return_aux=True)
+
+        # I branch 输入
+        i = hvi[:, 2:3, :, :].to(dtypes)
+
         # low
         i_enc0 = self.IE_block0(i)
         i_enc1 = self.IE_block1(i_enc0)
@@ -116,14 +125,21 @@ class CIDNet(nn.Module, PyTorchModelHubMixin):
         hv_1 = self.HVD_block1(hv_1, hv_jump0)
         hv_0 = self.HVD_block0(hv_1)
         
+        # 原始逻辑
+        # output_hvi = torch.cat([hv_0, i_dec0], dim=1) + hvi
+        # output_rgb = self.trans.PHVIT(output_hvi)
+        # 改进K逻辑
+        
         output_hvi = torch.cat([hv_0, i_dec0], dim=1) + hvi
-        output_rgb = self.trans.PHVIT(output_hvi)
+        output_rgb = self.trans.PHVIT(output_hvi, hvi_aux)
+
+        if return_hvi:
+            return output_rgb, output_hvi, hvi_aux
 
         return output_rgb
     
-    def HVIT(self,x):
-        hvi = self.trans.HVIT(x)
-        return hvi
+    def HVIT(self, x, aux=None, return_aux=False):
+        return self.trans.HVIT(x, return_aux=return_aux, aux=aux)
     
     
 
