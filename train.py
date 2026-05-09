@@ -58,21 +58,17 @@ def train(epoch):
             
         gt_rgb = im2
         output_hvi = model.HVIT(output_rgb)
-        with torch.no_grad():
-            gt_hvi = model.HVIT(gt_rgb)
-
+        gt_hvi = model.HVIT(gt_rgb)
         loss_hvi = L1_loss(output_hvi, gt_hvi) + D_loss(output_hvi, gt_hvi) + E_loss(output_hvi, gt_hvi) + opt.P_weight * P_loss(output_hvi, gt_hvi)[0]
         loss_rgb = L1_loss(output_rgb, gt_rgb) + D_loss(output_rgb, gt_rgb) + E_loss(output_rgb, gt_rgb) + opt.P_weight * P_loss(output_rgb, gt_rgb)[0]
         loss = loss_rgb + opt.HVI_weight * loss_hvi
         iter += 1
         
-
-        optimizer.zero_grad()
-        loss.backward()
         if opt.grad_clip:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.01, norm_type=2)
         
-        
+        optimizer.zero_grad()
+        loss.backward()
         optimizer.step()
         
         loss_print = loss_print + loss.item()
@@ -199,17 +195,13 @@ if __name__ == '__main__':
     ssim = []
     lpips = []
     start_epoch=0
-    
     if opt.start_epoch > 0:
         start_epoch = opt.start_epoch
     if not os.path.exists(opt.val_folder):          
         os.mkdir(opt.val_folder) 
-    training_metrics_dir = os.path.join(opt.val_folder, 'training')
-    if not os.path.exists(training_metrics_dir):
-        os.mkdir(training_metrics_dir)
         
     now = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    with open(os.path.join(training_metrics_dir, f"metrics{now}.md"), "w") as f:
+    with open(f"./results/training/metrics{now}.md", "w") as f:
         f.write("dataset: "+ opt.dataset + "\n")  
         f.write(f"lr: {opt.lr}\n")  
         f.write(f"batch size: {opt.batchSize}\n")  
@@ -280,6 +272,6 @@ if __name__ == '__main__':
             print(psnr)
             print(ssim)
             print(lpips)
-            with open(os.path.join(training_metrics_dir, f"metrics{now}.md"), "a") as f:
+            with open(f"./results/training/metrics{now}.md", "a") as f:
                 f.write(f"| {epoch} | { avg_psnr:.4f} | {avg_ssim:.4f} | {avg_lpips:.4f} |\n")  
         torch.cuda.empty_cache()
