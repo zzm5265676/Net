@@ -197,13 +197,17 @@ if __name__ == '__main__':
     ssim = []
     lpips = []
     start_epoch=0
+    
     if opt.start_epoch > 0:
         start_epoch = opt.start_epoch
     if not os.path.exists(opt.val_folder):          
         os.mkdir(opt.val_folder) 
+    training_metrics_dir = os.path.join(opt.val_folder, 'training')
+    if not os.path.exists(training_metrics_dir):
+        os.mkdir(training_metrics_dir)
         
     now = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    with open(f"./results/training/metrics{now}.md", "w") as f:
+    with open(os.path.join(training_metrics_dir, f"metrics{now}.md"), "w") as f:
         f.write("dataset: "+ opt.dataset + "\n")  
         f.write(f"lr: {opt.lr}\n")  
         f.write(f"batch size: {opt.batchSize}\n")  
@@ -274,6 +278,6 @@ if __name__ == '__main__':
             print(psnr)
             print(ssim)
             print(lpips)
-            with open(f"./results/training/metrics{now}.md", "a") as f:
+            with open(os.path.join(training_metrics_dir, f"metrics{now}.md"), "a") as f:
                 f.write(f"| {epoch} | { avg_psnr:.4f} | {avg_ssim:.4f} | {avg_lpips:.4f} |\n")  
         torch.cuda.empty_cache()
