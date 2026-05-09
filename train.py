@@ -15,6 +15,9 @@ from loss.losses import *
 from data.scheduler import *
 from tqdm import tqdm
 from datetime import datetime
+from net.losses_extra import SobelEdgeLoss, dark_weighted_l1, color_ratio_loss
+import warnings
+warnings.filterwarnings("ignore")
 
 opt = option().parse_args()
 
@@ -37,40 +40,73 @@ def train_init():
     
 def train(epoch):
     model.train()
+
     loss_print = 0
     pic_cnt = 0
     loss_last_10 = 0
     pic_last_10 = 0
+
     train_len = len(training_data_loader)
     iter = 0
+
     torch.autograd.set_detect_anomaly(opt.grad_detect)
+
     for batch in tqdm(training_data_loader):
         im1, im2, path1, path2 = batch[0], batch[1], batch[2], batch[3]
         im1 = im1.cuda()
         im2 = im2.cuda()
-        
+
         # use random gamma function (enhancement curve) to improve generalization
         if opt.gamma:
-            gamma = random.randint(opt.start_gamma,opt.end_gamma) / 100.0
-            output_rgb = model(im1 ** gamma)  
+            gamma = random.randint(opt.start_gamma, opt.end_gamma) / 100.0
+            low_rgb = im1 ** gamma
         else:
-            output_rgb = model(im1)  
+            low_rgb = im1 
             
         gt_rgb = im2
-        output_hvi = model.HVIT(output_rgb)
+
+
+        output_rgb = model(low_rgb)
+        # 兼容一下，当前也可以使用
+        if isinstance(output_rgb, (tuple, list)):
+            output_rgb = output_rgb[0]
+        
+        # gt_hvi不反向传播梯度
+        # with torch.no_grad():
         gt_hvi = model.HVIT(gt_rgb)
+        output_hvi = model.HVIT(output_rgb)
+
+
+        # -----------------------------------
+        #  至此以及完成2组输入输出的准备 ①gt_rgb ②gt_hvi ③output_rgb ④output_hvi
+        #  针对2组gt和output 丰富loss
+        # -----------------------------------
+
         loss_hvi = L1_loss(output_hvi, gt_hvi) + D_loss(output_hvi, gt_hvi) + E_loss(output_hvi, gt_hvi) + opt.P_weight * P_loss(output_hvi, gt_hvi)[0]
         loss_rgb = L1_loss(output_rgb, gt_rgb) + D_loss(output_rgb, gt_rgb) + E_loss(output_rgb, gt_rgb) + opt.P_weight * P_loss(output_rgb, gt_rgb)[0]
-        loss = loss_rgb + opt.HVI_weight * loss_hvi
-        iter += 1
-        
+        # -----------------------------------
+        # 5. 新增 Edge / Dark / Color loss
+        # -----------------------------------
+        loss_edge = Edge_loss(output_rgb, gt_rgb)
+        loss_color = color_ratio_loss(output_rgb, gt_rgb)
+        loss_dark = dark_weighted_l1(output_rgb,gt_rgb,low_rgb,opt.dark_alpha)
 
+        #loss = loss_rgb + opt.HVI_weight * loss_hvi
+        loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.edge_weight * loss_edge + opt.dark_weight * loss_dark + opt.color_weight * loss_color
+        
+        
+        iter += 1
+
+        #之前的有点问题，裁剪梯度实际没有起到作用
+        # 1. 清空梯度
         optimizer.zero_grad()
+        # 2. 算梯度
         loss.backward()
+        # 3. 修剪梯度
         if opt.grad_clip:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.01, norm_type=2)
         
-        
+         # 4. 更新权重
         optimizer.step()
         
         loss_print = loss_print + loss.item()
@@ -78,8 +114,20 @@ def train(epoch):
         pic_cnt += 1
         pic_last_10 += 1
         if iter == train_len:
-            print("===> Epoch[{}]: Loss: {:.4f} || Learning rate: lr={}.".format(epoch,
-                loss_last_10/pic_last_10, optimizer.param_groups[0]['lr']))
+            print(
+                "===> Epoch[{}]: Loss: {:.4f} || "
+                "RGB: {:.4f} HVI: {:.4f} Edge: {:.4f} Dark: {:.4f} Color: {:.4f} || "
+                "Learning rate: lr={}.".format(
+                    epoch,
+                    loss_last_10 / pic_last_10,
+                    loss_rgb.item(),
+                    loss_hvi.item(),
+                    loss_edge.item(),
+                    loss_dark.item(),
+                    loss_color.item(),
+                    optimizer.param_groups[0]['lr']
+                )
+            )
             loss_last_10 = 0
             pic_last_10 = 0
             output_img = transforms.ToPILImage()((output_rgb)[0].squeeze(0))
@@ -189,6 +237,7 @@ if __name__ == '__main__':
     model = build_model()
     optimizer,scheduler = make_scheduler()
     L1_loss,P_loss,E_loss,D_loss = init_loss()
+    Edge_loss = SobelEdgeLoss().cuda()
     
     '''
     train
