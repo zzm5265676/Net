@@ -164,3 +164,9 @@ output
 weights
 flagged
 output_hf
+datasets/
+output/
+experiments/
+weights/
+pic/
+results
