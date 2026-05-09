@@ -58,8 +58,9 @@ def dark_weighted_l1(pred, target, low, alpha=2.0, eps=1e-6):
 
     w(x) = 1 + alpha * (1 - I_low(x))
     """
-    i_low = low.max(dim=1, keepdim=True)[0]   # [B,1,H,W]
-    weight = 1.0 + alpha * (1.0 - i_low)
+    with torch.no_grad():
+        i_low = low.max(dim=1, keepdim=True)[0]   # [B,1,H,W]
+        weight = 1.0 + alpha * (1.0 - i_low)
 
     loss = torch.abs(pred - target) * weight
 
