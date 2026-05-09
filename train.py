@@ -199,6 +199,9 @@ if __name__ == '__main__':
         start_epoch = opt.start_epoch
     if not os.path.exists(opt.val_folder):          
         os.mkdir(opt.val_folder) 
+    training_metrics_dir = os.path.join(opt.val_folder, 'training')
+    if not os.path.exists(training_metrics_dir):
+        os.mkdir(training_metrics_dir)
         
     now = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     with open(f"./results/training/metrics{now}.md", "w") as f:
