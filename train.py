@@ -355,7 +355,6 @@ if __name__ == '__main__':
     if not os.path.exists(training_metrics_dir):
         os.mkdir(training_metrics_dir)
         
-    global metrics_file_path
     now = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     metrics_file_path = os.path.join(training_metrics_dir, f"metrics{now}.md")
     with open(metrics_file_path, "w") as f:
