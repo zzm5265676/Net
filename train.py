@@ -193,7 +193,7 @@ def load_datasets():
         
     elif opt.dataset == 'fivek':
         train_set = get_fivek_training_set(opt.data_train_fivek,size=opt.cropSize)
-        test_set = get_fivek_eval_set(opt.data_val_fivek)
+        test_set = get_fivek_eval_set(opt.data_test_fivek)
     else:
         raise Exception("should choose a dataset")
     
