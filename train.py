@@ -15,8 +15,12 @@ from loss.losses import *
 from data.scheduler import *
 from tqdm import tqdm
 from datetime import datetime
+from net.losses_extra import SobelEdgeLoss, dark_weighted_l1, color_ratio_loss
+import warnings
+warnings.filterwarnings("ignore")
 
 opt = option().parse_args()
+metrics_file_path = None
 
 def seed_torch():
     seed = random.randint(1, 1000000)
@@ -34,6 +38,36 @@ def train_init():
     cuda = opt.gpu_mode
     if cuda and not torch.cuda.is_available():
         raise Exception("No GPU found, please run without --cuda")
+
+def append_training_stats(epoch, stats):
+    if metrics_file_path is None:
+        return
+    with open(metrics_file_path, "a") as f:
+        f.write(
+            "train epoch {}: total={:.4f}, rgb={:.4f}, hvi={:.4f}, edge={:.4f}, dark={:.4f}, color={:.4f}, "
+            "hvi_w={:.4f}, edge_w={:.4f}, dark_w={:.4f}, color_w={:.4f}, "
+            "k_mean={:.4f}, k_std={:.4f}, k_min={:.4f}, k_max={:.4f}, "
+            "k_near_min={:.2%}, k_near_max={:.2%}, lr={:.8f}\n".format(
+                epoch,
+                stats["total"],
+                stats["rgb"],
+                stats["hvi"],
+                stats["edge"],
+                stats["dark"],
+                stats["color"],
+                stats["hvi_w"],
+                stats["edge_w"],
+                stats["dark_w"],
+                stats["color_w"],
+                stats["k_mean"],
+                stats["k_std"],
+                stats["k_min"],
+                stats["k_max"],
+                stats["k_near_min"],
+                stats["k_near_max"],
+                stats["lr"],
+            )
+        )
     
 def train(epoch):
     model.train()
@@ -44,6 +78,12 @@ def train(epoch):
     loss_rgb_sum = 0
     loss_hvi_sum = 0
     loss_hvi_weighted_sum = 0
+    loss_edge_sum = 0
+    loss_dark_sum = 0
+    loss_color_sum = 0
+    loss_edge_weighted_sum = 0
+    loss_dark_weighted_sum = 0
+    loss_color_weighted_sum = 0
     k_map_mean_sum = 0
     k_map_std_sum = 0
     k_map_min_sum = 0
@@ -77,7 +117,14 @@ def train(epoch):
 
         loss_hvi = L1_loss(output_hvi, gt_hvi) + D_loss(output_hvi, gt_hvi) + E_loss(output_hvi, gt_hvi) + opt.P_weight * P_loss(output_hvi, gt_hvi)[0]
         loss_rgb = L1_loss(output_rgb, gt_rgb) + D_loss(output_rgb, gt_rgb) + E_loss(output_rgb, gt_rgb) + opt.P_weight * P_loss(output_rgb, gt_rgb)[0]
-        loss = loss_rgb + opt.HVI_weight * loss_hvi
+        
+        loss_edge = Edge_loss(output_rgb, gt_rgb)
+        loss_color = color_ratio_loss(output_rgb, gt_rgb)
+        loss_dark = dark_weighted_l1(output_rgb,gt_rgb,low_rgb,opt.dark_alpha)
+
+        #loss = loss_rgb + opt.HVI_weight * loss_hvi
+        loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.edge_weight * loss_edge + opt.dark_weight * loss_dark + opt.color_weight * loss_color
+        
         iter += 1
         
 
@@ -94,6 +141,12 @@ def train(epoch):
         loss_rgb_sum += loss_rgb.item()
         loss_hvi_sum += loss_hvi.item()
         loss_hvi_weighted_sum += (opt.HVI_weight * loss_hvi).item()
+        loss_edge_sum += loss_edge.item()
+        loss_dark_sum += loss_dark.item()
+        loss_color_sum += loss_color.item()
+        loss_edge_weighted_sum += (opt.edge_weight * loss_edge).item()
+        loss_dark_weighted_sum += (opt.dark_weight * loss_dark).item()
+        loss_color_weighted_sum += (opt.color_weight * loss_color).item()
 
         with torch.no_grad():
             k_map = hvi_aux["k_map"]
@@ -114,6 +167,12 @@ def train(epoch):
             avg_loss_rgb = loss_rgb_sum / pic_cnt
             avg_loss_hvi = loss_hvi_sum / pic_cnt
             avg_loss_hvi_weighted = loss_hvi_weighted_sum / pic_cnt
+            avg_loss_edge = loss_edge_sum / pic_cnt
+            avg_loss_dark = loss_dark_sum / pic_cnt
+            avg_loss_color = loss_color_sum / pic_cnt
+            avg_loss_edge_weighted = loss_edge_weighted_sum / pic_cnt
+            avg_loss_dark_weighted = loss_dark_weighted_sum / pic_cnt
+            avg_loss_color_weighted = loss_color_weighted_sum / pic_cnt
             avg_k_mean = k_map_mean_sum / pic_cnt
             avg_k_std = k_map_std_sum / pic_cnt
             avg_k_min = k_map_min_sum / pic_cnt
@@ -122,7 +181,8 @@ def train(epoch):
             avg_k_high_ratio = k_map_high_ratio_sum / pic_cnt
             print(
                 "===> Epoch[{}]: Loss: {:.4f} || "
-                "RGB: {:.4f} HVI: {:.4f} HVI(w): {:.4f} || "
+                "Raw -> RGB: {:.4f} HVI: {:.4f} Edge: {:.4f} Dark: {:.4f} Color: {:.4f} || "
+                "Weighted -> HVI: {:.4f} Edge: {:.4f} Dark: {:.4f} Color: {:.4f} || "
                 "k(x) mean/std: {:.4f}/{:.4f} min/max: {:.4f}/{:.4f} "
                 "near_min: {:.2%} near_max: {:.2%} || "
                 "Learning rate: lr={}.".format(
@@ -130,7 +190,13 @@ def train(epoch):
                     avg_total,
                     avg_loss_rgb,
                     avg_loss_hvi,
+                    avg_loss_edge,
+                    avg_loss_dark,
+                    avg_loss_color,
                     avg_loss_hvi_weighted,
+                    avg_loss_edge_weighted,
+                    avg_loss_dark_weighted,
+                    avg_loss_color_weighted,
                     avg_k_mean,
                     avg_k_std,
                     avg_k_min,
@@ -139,6 +205,28 @@ def train(epoch):
                     avg_k_high_ratio,
                     optimizer.param_groups[0]['lr']
                 )
+            )
+            append_training_stats(
+                epoch,
+                {
+                    "total": avg_total,
+                    "rgb": avg_loss_rgb,
+                    "hvi": avg_loss_hvi,
+                    "edge": avg_loss_edge,
+                    "dark": avg_loss_dark,
+                    "color": avg_loss_color,
+                    "hvi_w": avg_loss_hvi_weighted,
+                    "edge_w": avg_loss_edge_weighted,
+                    "dark_w": avg_loss_dark_weighted,
+                    "color_w": avg_loss_color_weighted,
+                    "k_mean": avg_k_mean,
+                    "k_std": avg_k_std,
+                    "k_min": avg_k_min,
+                    "k_max": avg_k_max,
+                    "k_near_min": avg_k_low_ratio,
+                    "k_near_max": avg_k_high_ratio,
+                    "lr": optimizer.param_groups[0]['lr'],
+                }
             )
             loss_last_10 = 0
             pic_last_10 = 0
@@ -249,6 +337,7 @@ if __name__ == '__main__':
     model = build_model()
     optimizer,scheduler = make_scheduler()
     L1_loss,P_loss,E_loss,D_loss = init_loss()
+    Edge_loss = SobelEdgeLoss().cuda()
     
     '''
     train
@@ -266,17 +355,26 @@ if __name__ == '__main__':
     if not os.path.exists(training_metrics_dir):
         os.mkdir(training_metrics_dir)
         
+    global metrics_file_path
     now = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    with open(os.path.join(training_metrics_dir, f"metrics{now}.md"), "w") as f:
+    metrics_file_path = os.path.join(training_metrics_dir, f"metrics{now}.md")
+    with open(metrics_file_path, "w") as f:
         f.write("dataset: "+ opt.dataset + "\n")  
         f.write(f"lr: {opt.lr}\n")  
         f.write(f"batch size: {opt.batchSize}\n")  
         f.write(f"crop size: {opt.cropSize}\n")  
         f.write(f"HVI_weight: {opt.HVI_weight}\n")  
+        f.write(f"edge_weight: {opt.edge_weight}\n")
+        f.write(f"dark_weight: {opt.dark_weight}\n")
+        f.write(f"color_weight: {opt.color_weight}\n")
+        f.write(f"dark_alpha: {opt.dark_alpha}\n")
         f.write(f"L1_weight: {opt.L1_weight}\n")  
         f.write(f"D_weight: {opt.D_weight}\n")  
         f.write(f"E_weight: {opt.E_weight}\n")  
         f.write(f"P_weight: {opt.P_weight}\n")  
+        f.write("\n[train_stats]\n")
+        f.write("format: train epoch N: total, raw losses, weighted losses, k(x) stats, lr\n\n")
+        f.write("[val_metrics]\n")
         f.write("| Epochs | PSNR | SSIM | LPIPS |\n")  
         f.write("|----------------------|----------------------|----------------------|----------------------|\n")  
         
@@ -338,6 +436,6 @@ if __name__ == '__main__':
             print(psnr)
             print(ssim)
             print(lpips)
-            with open(os.path.join(training_metrics_dir, f"metrics{now}.md"), "a") as f:
+            with open(metrics_file_path, "a") as f:
                 f.write(f"| {epoch} | { avg_psnr:.4f} | {avg_ssim:.4f} | {avg_lpips:.4f} |\n")  
         torch.cuda.empty_cache()
