@@ -69,7 +69,7 @@ def build_eval_loader(args):
             batch_size=1,
             shuffle=False,
         )
-        output_folder = output_folder or './output_kx/LOLv1/'
+        output_folder = output_folder or './output/LOLv1/'
 
     elif args.lol_v2_real:
         eval_data = DataLoader(
@@ -157,7 +157,7 @@ if __name__ == '__main__':
     if not torch.cuda.is_available():
         raise Exception("No GPU found, or need to change CUDA_VISIBLE_DEVICES number")
 
-    os.makedirs('./output_kx', exist_ok=True)
+    os.makedirs('./output', exist_ok=True)
 
     eval_data, output_folder, norm_size, alpha = build_eval_loader(args)
     eval_net = CIDNet().cuda()
