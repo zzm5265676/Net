@@ -16,6 +16,7 @@ from data.scheduler import *
 from tqdm import tqdm
 from datetime import datetime
 from net.losses_extra import SobelEdgeLoss, dark_weighted_l1, color_ratio_loss
+from net.losses_extra import highlight_boundary_mask, WeightedSobelEdgeLoss
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -99,9 +100,16 @@ def train(epoch):
         loss_edge = Edge_loss(output_rgb, gt_rgb)
         loss_color = color_ratio_loss(output_rgb, gt_rgb)
         loss_dark = dark_weighted_l1(output_rgb,gt_rgb,low_rgb,opt.dark_alpha)
+        # 高光边界 mask 推荐用 low_rgb 或 gt_rgb？
+        # 如果是 paired 训练，建议用 gt_rgb 更稳定；
+        # 如果你希望模型关注输入中已经存在的光源位置，可以用 low_rgb。
+        hi_boundary = highlight_boundary_mask(gt_rgb,v_thresh=0.85,c_thresh=0.08,kernel_size=5)
+        loss_hi_edge = HiEdge_loss(output_rgb,gt_rgb,hi_boundary)
 
         #loss = loss_rgb + opt.HVI_weight * loss_hvi
-        loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.edge_weight * loss_edge + opt.dark_weight * loss_dark + opt.color_weight * loss_color
+        #loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.edge_weight * loss_edge + opt.dark_weight * loss_dark + opt.color_weight * loss_color
+        #loss = loss_rgb + opt.HVI_weight * loss_hvi + 0.02 * loss_hi_edge + opt.edge_weight * loss_edge
+        loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.dark_weight * loss_dark
         
         
         iter += 1
@@ -271,6 +279,7 @@ if __name__ == '__main__':
     optimizer,scheduler = make_scheduler()
     L1_loss,P_loss,E_loss,D_loss = init_loss()
     Edge_loss = SobelEdgeLoss().cuda()
+    HiEdge_loss = WeightedSobelEdgeLoss().cuda()
     
     '''
     train

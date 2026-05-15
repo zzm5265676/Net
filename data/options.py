@@ -13,17 +13,17 @@ def option():
     parser = argparse.ArgumentParser(description='CIDNet')
     parser.add_argument('--batchSize', type=int, default=8, help='training batch size')
     parser.add_argument('--cropSize', type=int, default=256, help='image crop size (patch size)')
-    parser.add_argument('--nEpochs', type=int, default=1000, help='number of epochs to train for end')
+    parser.add_argument('--nEpochs', type=int, default=3000, help='number of epochs to train for end')
     parser.add_argument('--start_epoch', type=int, default=0, help='number of epochs to start, >0 is retrained a pre-trained pth')
     parser.add_argument('--snapshots', type=int, default=10, help='Snapshots for save checkpoints pth')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning Rate')
     parser.add_argument('--gpu_mode', type=_str2bool, default=True)
     parser.add_argument('--shuffle', type=_str2bool, default=True)
-    parser.add_argument('--threads', type=int, default=4, help='number of threads for dataloader to use')
+    parser.add_argument('--threads', type=int, default=12, help='number of threads for dataloader to use')
 
-    parser.add_argument('--edge_weight', type=float, default=0.00)
-    parser.add_argument('--dark_weight', type=float, default=0.005)
-    parser.add_argument('--color_weight', type=float, default=0.00)
+    parser.add_argument('--edge_weight', type=float, default=0.05)
+    parser.add_argument('--dark_weight', type=float, default=0.05)
+    parser.add_argument('--color_weight', type=float, default=0.02)
     parser.add_argument('--dark_alpha', type=float, default=1.0)
 
     # choose a scheduler
@@ -70,7 +70,8 @@ def option():
     parser.add_argument('--L1_weight', type=float, default=1.0)
     parser.add_argument('--D_weight',  type=float, default=0.5)
     parser.add_argument('--E_weight',  type=float, default=50.0)
-    parser.add_argument('--P_weight',  type=float, default=1e-2)
+    #parser.add_argument('--P_weight',  type=float, default=1e-2)
+    parser.add_argument('--P_weight',  type=float, default=0.0)
     
     # use random gamma function (enhancement curve) to improve generalization
     parser.add_argument('--gamma', type=_str2bool, default=False)
