@@ -106,10 +106,10 @@ def train(epoch):
         hi_boundary = highlight_boundary_mask(gt_rgb,v_thresh=0.85,c_thresh=0.08,kernel_size=5)
         loss_hi_edge = HiEdge_loss(output_rgb,gt_rgb,hi_boundary)
 
-        #loss = loss_rgb + opt.HVI_weight * loss_hvi
+        # loss = loss_rgb + opt.HVI_weight * loss_hvi
         #loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.edge_weight * loss_edge + opt.dark_weight * loss_dark + opt.color_weight * loss_color
         #loss = loss_rgb + opt.HVI_weight * loss_hvi + 0.02 * loss_hi_edge + opt.edge_weight * loss_edge
-        loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.dark_weight * loss_dark
+        loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.dark_weight * loss_hi_edge
         
         
         iter += 1
