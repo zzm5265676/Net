@@ -15,6 +15,10 @@ from loss.losses import *
 from data.scheduler import *
 from tqdm import tqdm
 from datetime import datetime
+from loss.losses_extra import SobelEdgeLoss, dark_weighted_l1, color_ratio_loss
+from loss.losses_extra import highlight_boundary_mask, WeightedSobelEdgeLoss
+import warnings
+warnings.filterwarnings("ignore")
 
 opt = option().parse_args()
 
@@ -62,7 +66,12 @@ def train(epoch):
             gt_hvi = model.HVIT(gt_rgb)
         loss_hvi = L1_loss(output_hvi, gt_hvi) + D_loss(output_hvi, gt_hvi) + E_loss(output_hvi, gt_hvi) + opt.P_weight * P_loss(output_hvi, gt_hvi)[0]
         loss_rgb = L1_loss(output_rgb, gt_rgb) + D_loss(output_rgb, gt_rgb) + E_loss(output_rgb, gt_rgb) + opt.P_weight * P_loss(output_rgb, gt_rgb)[0]
-        loss = loss_rgb + opt.HVI_weight * loss_hvi
+        
+        hi_boundary = highlight_boundary_mask(gt_rgb,v_thresh=0.85,c_thresh=0.08,kernel_size=5)
+        loss_hi_edge = HiEdge_loss(output_rgb,gt_rgb,hi_boundary)
+        
+        loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.dark_weight * loss_hi_edge * 0
+
         iter += 1
         
         optimizer.zero_grad()
@@ -189,6 +198,7 @@ if __name__ == '__main__':
     model = build_model()
     optimizer,scheduler = make_scheduler()
     L1_loss,P_loss,E_loss,D_loss = init_loss()
+    HiEdge_loss = WeightedSobelEdgeLoss().cuda()
     
     '''
     train

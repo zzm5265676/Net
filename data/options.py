@@ -21,6 +21,11 @@ def option():
     parser.add_argument('--shuffle', type=_str2bool, default=True)
     parser.add_argument('--threads', type=int, default=12, help='number of threads for dataloader to use')
 
+    parser.add_argument('--edge_weight', type=float, default=0.05)
+    parser.add_argument('--dark_weight', type=float, default=0.05)
+    parser.add_argument('--color_weight', type=float, default=0.02)
+    parser.add_argument('--dark_alpha', type=float, default=1.0)
+
     # choose a scheduler
     parser.add_argument('--cos_restart_cyclic', type=_str2bool, default=False)
     parser.add_argument('--cos_restart', type=_str2bool, default=True)
