@@ -20,7 +20,7 @@ class CIDNet(nn.Module, PyTorchModelHubMixin):
         # HV_ways
         self.HVE_block0 = nn.Sequential(
             nn.ReplicationPad2d(1),
-            nn.Conv2d(3, ch1, 3, stride=1, padding=0,bias=False)
+            nn.Conv2d(2, ch1, 3, stride=1, padding=0,bias=False)
             )
         self.HVE_block1 = NormDownsample(ch1, ch2, use_norm = norm)
         self.HVE_block2 = NormDownsample(ch2, ch3, use_norm = norm)
@@ -80,11 +80,12 @@ class CIDNet(nn.Module, PyTorchModelHubMixin):
 
         # I branch 输入
         i = hvi[:, 2:3, :, :].to(dtypes)
+        hv = hvi[:, :2, :, :].to(dtypes)
 
         # low
         i_enc0 = self.IE_block0(i)
         i_enc1 = self.IE_block1(i_enc0)
-        hv_0 = self.HVE_block0(hvi)
+        hv_0 = self.HVE_block0(hv)
         hv_1 = self.HVE_block1(hv_0)
         i_jump0 = i_enc0
         hv_jump0 = hv_0
