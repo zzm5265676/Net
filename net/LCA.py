@@ -91,3 +91,17 @@ class I_LCA(nn.Module):
         x = x + self.ffn(self.norm(x),self.norm(y))
         x = x + self.gdfn(self.norm(x)) 
         return x
+    
+class ResBlock(nn.Module):
+    def __init__(self, ch):
+        super().__init__()
+        self.body = nn.Sequential(
+            nn.ReplicationPad2d(1),
+            nn.Conv2d(ch, ch, 3, 1, 0, bias=False),
+            nn.PReLU(),
+            nn.ReplicationPad2d(1),
+            nn.Conv2d(ch, ch, 3, 1, 0, bias=False)
+        )
+
+    def forward(self, x):
+        return x + self.body(x)

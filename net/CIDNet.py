@@ -7,10 +7,22 @@ from huggingface_hub import PyTorchModelHubMixin
 
 class CIDNet(nn.Module, PyTorchModelHubMixin):
     def __init__(self, 
-                 channels=[36, 36, 72, 144],
+                 channels=[48, 48, 96, 192],
                  heads=[1, 2, 4, 8],
                  norm=False
         ):
+        """
+        先扩大 channels
+        Baseline: [36, 36, 72, 144]
+        Medium:   [48, 48, 96, 192]
+        Large:    [64, 64, 128, 256]
+        """
+        """
+        只增强瓶颈层，不大幅增加浅层开销
+        [36, 48, 96, 192]
+        [36, 48, 96, 192]
+        [48, 48, 96, 192]
+        """
         super(CIDNet, self).__init__()
         
         
@@ -31,7 +43,10 @@ class CIDNet(nn.Module, PyTorchModelHubMixin):
         self.HVD_block1 = NormUpsample(ch2, ch1, use_norm = norm)
         self.HVD_block0 = nn.Sequential(
             nn.ReplicationPad2d(1),
-            nn.Conv2d(ch1, 2, 3, stride=1, padding=0,bias=False)
+            nn.Conv2d(ch1, ch1, 3, stride=1, padding=0, bias=False),
+            nn.PReLU(),
+            nn.ReplicationPad2d(1),
+            nn.Conv2d(ch1, 2, 3, stride=1, padding=0, bias=False)
         )
         
         
@@ -49,8 +64,11 @@ class CIDNet(nn.Module, PyTorchModelHubMixin):
         self.ID_block1 = NormUpsample(ch2, ch1, use_norm=norm)
         self.ID_block0 =  nn.Sequential(
             nn.ReplicationPad2d(1),
-            nn.Conv2d(ch1, 1, 3, stride=1, padding=0,bias=False),
-            )
+            nn.Conv2d(ch1, ch1, 3, stride=1, padding=0, bias=False),
+            nn.PReLU(),
+            nn.ReplicationPad2d(1),
+            nn.Conv2d(ch1, 1, 3, stride=1, padding=0, bias=False)
+        )
         
         self.HV_LCA1 = HV_LCA(ch2, head2)
         self.HV_LCA2 = HV_LCA(ch3, head3)
@@ -66,6 +84,14 @@ class CIDNet(nn.Module, PyTorchModelHubMixin):
         self.I_LCA5 = I_LCA(ch3, head3)
         self.I_LCA6 = I_LCA(ch2, head2)
         
+        self.hv_refine0 = ResBlock(ch1)
+        self.hv_refine1 = ResBlock(ch2)
+        self.hv_refine2 = ResBlock(ch3)
+
+        self.i_refine0 = ResBlock(ch1)
+        self.i_refine1 = ResBlock(ch2)
+        self.i_refine2 = ResBlock(ch3)
+
         self.trans = RGB_HVI()
         
     def forward(self, x):
@@ -115,6 +141,10 @@ class CIDNet(nn.Module, PyTorchModelHubMixin):
         i_dec0 = self.ID_block0(i_dec1)
         hv_1 = self.HVD_block1(hv_1, hv_jump0)
         hv_0 = self.HVD_block0(hv_1)
+
+        # 添加一个refinement
+        hv_1 = self.hv_refine0(hv_1)
+        i_dec1 = self.i_refine0(i_dec1)
         
         output_hvi = torch.cat([hv_0, i_dec0], dim=1) + hvi
         output_rgb = self.trans.PHVIT(output_hvi)
